@@ -166,6 +166,18 @@ function App() {
     localStorage.setItem("darkMode", JSON.stringify(darkMode));
   }, [darkMode]);
 
+
+  // Ask Notification Permission
+useEffect(() => {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "default") {
+    Notification.requestPermission().then((permission) => {
+      console.log("Permission:", permission);
+    });
+  }
+}, []); 
+
   // Reminder Notification
 useEffect(() => {
   if (!("Notification" in window)) return;
