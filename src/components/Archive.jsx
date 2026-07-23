@@ -1,14 +1,34 @@
+import { useNavigate } from "react-router-dom";
+import { FaArrowLeft } from "react-icons/fa";
+
 function Archive({
   archive,
   darkMode,
   onRestore,
   onDelete,
 }) {
+  const navigate = useNavigate();
+
   return (
     <div className="px-10 py-8">
-      <h2 className="text-2xl font-bold mb-6">
-        📦 Archive
-      </h2>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => navigate("/")}
+          className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition ${
+            darkMode
+              ? "bg-gray-700 text-white hover:bg-gray-600"
+              : "bg-white text-gray-700 hover:bg-gray-100"
+          }`}
+          title="Back to Home"
+        >
+          <FaArrowLeft />
+        </button>
+
+        <h2 className="text-2xl font-bold">
+          📦 Archive
+        </h2>
+      </div>
 
       {archive.length === 0 ? (
         <p
@@ -40,14 +60,14 @@ function Archive({
               <div className="flex justify-between">
                 <button
                   onClick={() => onRestore(note.id)}
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded"
+                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition"
                 >
                   Restore
                 </button>
 
                 <button
                   onClick={() => onDelete(note.id)}
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded transition"
                 >
                   Delete
                 </button>
