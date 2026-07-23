@@ -85,7 +85,7 @@ const handleForgotPassword = async () => {
 }
 };
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#FFFDF4]">
+    <div className="relative min-h-screen overflow-hidden bg-[#FFF9E8]">
 
       {/* Top Left Sticky Notes */}
       <div className="absolute left-10 top-10 hidden lg:block">
@@ -143,18 +143,19 @@ const handleForgotPassword = async () => {
 
           {/* Login Card */}
           <div
-  className="
-    rounded-[18px]
-    bg-white
-    px-6
-    pt-7
-    pb-8
-    sm:px-8
-    lg:px-11
-    lg:pb-10
-    shadow-[0_18px_45px_rgba(255,193,7,0.18)]
-  "
->
+ className="
+rounded-[20px]
+bg-white
+border
+border-[#EFE4C6]
+px-6
+pt-7
+pb-8
+sm:px-8
+lg:px-11
+lg:pb-10
+shadow-[0_12px_48px_rgba(217,184,95,0.5)]
+">
 
             {/* Heading */}
             <div className="text-center">
