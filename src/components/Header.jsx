@@ -5,6 +5,7 @@ import {
   FaSun,
   FaTrash,
   FaArchive,
+  FaSignOutAlt,
 } from "react-icons/fa";
 import { Link, useLocation } from "react-router-dom";
 
@@ -13,6 +14,8 @@ function Header({
   setSearch,
   darkMode,
   setDarkMode,
+  onLogout,
+  user,
 }) {
   const location = useLocation();
 
@@ -54,6 +57,29 @@ function Header({
         </div>
 
         <div className="flex items-center gap-3">
+          {user?.photo && (
+  <img
+  src={user.photo}
+  alt={user.name}
+  title={user.name}
+  referrerPolicy="no-referrer"
+  className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-md"
+  onError={(e) => {
+    console.log("Image failed:", user.photo);
+    e.currentTarget.style.display = "none";
+  }}
+/>
+)}
+{user?.name && (
+  <div className="hidden md:flex flex-col mr-2">
+    <span className="text-sm font-semibold text-white">
+      {user.name}
+    </span>
+    <span className="text-xs text-yellow-100">
+      {user.email}
+    </span>
+  </div>
+)}
 
           {/* Archive */}
           <Link
@@ -94,6 +120,17 @@ function Header({
           >
             {darkMode ? <FaSun /> : <FaMoon />}
           </button>
+          <button
+  onClick={onLogout}
+  className={`w-12 h-12 rounded-full flex items-center justify-center shadow-md transition ${
+    darkMode
+      ? "bg-red-500 text-white hover:bg-red-600"
+      : "bg-white text-red-500 hover:bg-red-100"
+  }`}
+  title="Logout"
+>
+  <FaSignOutAlt />
+</button>
 
         </div>
 

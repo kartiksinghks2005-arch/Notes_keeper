@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import Login from "./components/Login";
+import Signup from "./components/Signup";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import {
   Header,
@@ -8,85 +10,185 @@ import {
   Trash,
   Archive,
 } from "./components";
+import { supabase } from "./supabase";
+
+// Maps a Supabase `notes` row to the note shape the app's components
+// expect (id, title, content, pinned, color, reminderDate, reminderTime,
+// notified).
+function mapRowToNote(row) {
+  return {
+    id: row.id,
+    title: row.title ?? "",
+    content: row.content ?? "",
+    pinned: row.pinned ?? false,
+    color: row.color ?? "bg-white",
+    reminderDate: row.reminder_date ?? "",
+    reminderTime: row.reminder_time ?? "",
+    notified: row.notified ?? false,
+  };
+}
+
+// Maps the app's note shape to a Supabase `notes` row for insert.
+// `reminder_date` is a real `date` column, so an empty string must
+// become `null` — Postgres rejects `""` for a date type.
+function mapNoteToRow(note, userId) {
+  const row = {
+    user_id: userId,
+    title: note.title ?? "",
+    content: note.content ?? "",
+    pinned: note.pinned ?? false,
+    color: note.color ?? "bg-white",
+    reminder_date: note.reminderDate ? note.reminderDate : null,
+    reminder_time: note.reminderTime ?? "",
+    notified: note.notified ?? false,
+  };
+
+  // Only send `id` when the note already has one (e.g. restoring from
+  // trash/archive). On a brand-new note with no id, omit it so Supabase
+  // generates the UUID via `gen_random_uuid()`.
+  if (note.id) {
+    row.id = note.id;
+  }
+
+  return row;
+}
 
 function App() {
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem("notes");
+const [notes, setNotes] = useState([]);
 
-    if (!savedNotes) return [];
-    
+  const [trash, setTrash] = useState([]);
 
-    return JSON.parse(savedNotes).map((note) => ({
-  id: note.id ?? crypto.randomUUID(),
-  title: note.title ?? "",
-  content: note.content ?? "",
-  pinned: note.pinned ?? false,
-  color: note.color ?? "bg-white",
-
-  // Reminder
-  reminderDate: note.reminderDate ?? "",
-  reminderTime: note.reminderTime ?? "",
-
-  notified: note.notified ?? false,
-}));
-});
-
-  const [trash, setTrash] = useState(() => {
-    return JSON.parse(localStorage.getItem("trash")) || [];
-  });
-
-  const [archive, setArchive] = useState(() => {
-    return JSON.parse(localStorage.getItem("archive")) || [];
-  });
+  const [archive, setArchive] = useState([]);
 
   const [darkMode, setDarkMode] = useState(() => {
     return JSON.parse(localStorage.getItem("darkMode")) || false;
   });
 
   const [search, setSearch] = useState("");
+  const [user, setUser] = useState(() => {
+  return JSON.parse(localStorage.getItem("user")) || null;
+});
 
-  function addNote(newNote) {
-  setNotes((prev) => [
-    {
+const currentUserEmail = user?.email || "guest";
+
+// Identifier used for Supabase's `user_id` column (Firebase uid
+// preferred, falls back to email).
+const userId = user?.uid || user?.email;
+
+const [showSignup, setShowSignup] = useState(false);
+
+const [isLoggedIn, setIsLoggedIn] = useState(() => {
+  return JSON.parse(localStorage.getItem("isLoggedIn")) || false;
+});
+
+// These refs prevent the Trash/Archive "save" effects (below) from firing
+// with stale, still-in-memory data belonging to the PREVIOUS user right
+// after currentUserEmail changes. Without them, switching users would
+// overwrite the new user's saved trash/archive with the old user's data
+// before it got a chance to load. (Active notes no longer use
+// localStorage or this pattern — they're loaded/saved directly against
+// Supabase.)
+const skipTrashSaveRef = useRef(false);
+const skipArchiveSaveRef = useRef(false);
+
+  async function addNote(newNote) {
+    const noteToInsert = {
       ...newNote,
       notified: false,
-    },
-    ...prev,
-  ]);
-}
+    };
 
-  function deleteNote(id) {
+    // Optimistic UI update so the note appears instantly, same as before.
+    setNotes((prev) => [noteToInsert, ...prev]);
+
+    try {
+      const { data, error } = await supabase
+        .from("notes")
+        .insert(mapNoteToRow(noteToInsert, userId))
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Reconcile local state with what Supabase actually stored.
+      setNotes((prev) =>
+        prev.map((note) =>
+          note.id === noteToInsert.id ? mapRowToNote(data) : note
+        )
+      );
+    } catch (err) {
+      console.error("Supabase: failed to add note:", err.message);
+
+      // Rollback the optimistic UI update since the insert failed.
+      setNotes((prev) => prev.filter((note) => note.id !== noteToInsert.id));
+    }
+  }
+
+  async function deleteNote(id) {
     const deletedNote = notes.find((note) => note.id === id);
 
     if (!deletedNote) return;
 
     setTrash((prev) => [deletedNote, ...prev]);
     setNotes((prev) => prev.filter((note) => note.id !== id));
+
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Supabase: failed to delete note:", err.message);
+    }
   }
 
-  function restoreNote(id) {
+  async function restoreNote(id) {
     const note = trash.find((item) => item.id === id);
 
     if (!note) return;
 
     setNotes((prev) => [note, ...prev]);
     setTrash((prev) => prev.filter((item) => item.id !== id));
+
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .insert(mapNoteToRow(note, userId));
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Supabase: failed to restore note from trash:", err.message);
+    }
   }
 
   function deleteForever(id) {
     setTrash((prev) => prev.filter((item) => item.id !== id));
   }
 
-  function archiveNote(id) {
+  async function archiveNote(id) {
     const note = notes.find((item) => item.id === id);
 
     if (!note) return;
 
     setArchive((prev) => [note, ...prev]);
     setNotes((prev) => prev.filter((item) => item.id !== id));
+
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Supabase: failed to archive note:", err.message);
+    }
   }
 
-  function restoreArchive(id) {
+  async function restoreArchive(id) {
     const note = archive.find((item) => item.id === id);
 
     if (!note) return;
@@ -95,6 +197,16 @@ function App() {
     setArchive((prev) =>
       prev.filter((item) => item.id !== id)
     );
+
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .insert(mapNoteToRow(note, userId));
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Supabase: failed to restore note from archive:", err.message);
+    }
   }
 
   function deleteArchive(id) {
@@ -103,7 +215,7 @@ function App() {
     );
   }
 
-  function updateNote(id, updatedNote) {
+  async function updateNote(id, updatedNote) {
   setNotes((prev) =>
     prev.map((note) =>
       note.id === id
@@ -120,13 +232,45 @@ function App() {
         : note
     )
   );
+
+  try {
+    const row = {};
+
+    if ("title" in updatedNote) row.title = updatedNote.title ?? "";
+    if ("content" in updatedNote) row.content = updatedNote.content ?? "";
+    if ("pinned" in updatedNote) row.pinned = updatedNote.pinned ?? false;
+    if ("color" in updatedNote) row.color = updatedNote.color ?? "bg-white";
+    if ("reminderDate" in updatedNote)
+      row.reminder_date = updatedNote.reminderDate
+        ? updatedNote.reminderDate
+        : null;
+    if ("reminderTime" in updatedNote)
+      row.reminder_time = updatedNote.reminderTime ?? "";
+    if ("notified" in updatedNote) row.notified = updatedNote.notified ?? false;
+
+    const { error } = await supabase
+      .from("notes")
+      .update(row)
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error("Supabase: failed to update note:", err.message);
+  }
 }
 
   function togglePin(id) {
+    const target = notes.find((note) => note.id === id);
+
+    if (!target) return;
+
+    const nextPinned = !target.pinned;
+
     setNotes((prev) => {
       const updated = prev.map((note) =>
         note.id === id
-          ? { ...note, pinned: !note.pinned }
+          ? { ...note, pinned: nextPinned }
           : note
       );
 
@@ -134,6 +278,17 @@ function App() {
         (a, b) => Number(b.pinned) - Number(a.pinned)
       );
     });
+
+    supabase
+      .from("notes")
+      .update({ pinned: nextPinned })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Supabase: failed to update pin:", error.message);
+        }
+      });
   }
 
   function changeColor(id, color) {
@@ -144,28 +299,103 @@ function App() {
           : note
       )
     );
-  }
 
-    // Save Notes
+    supabase
+      .from("notes")
+      .update({ color })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Supabase: failed to update color:", error.message);
+        }
+      });
+  }
+  function handleLogout() {
+  localStorage.removeItem("isLoggedIn");
+  localStorage.removeItem("user");
+
+  setUser(null);
+  setIsLoggedIn(false);
+}
+
+  // Load active notes from Supabase whenever the logged-in user changes.
   useEffect(() => {
-    localStorage.setItem("notes", JSON.stringify(notes));
-  }, [notes]);
+    let isCancelled = false;
+
+    async function loadNotes() {
+      if (!userId) {
+        setNotes([]);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("notes")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (!isCancelled) {
+          setNotes((data || []).map(mapRowToNote));
+        }
+      } catch (err) {
+        console.error("Supabase: failed to load notes:", err.message);
+        if (!isCancelled) setNotes([]);
+      }
+    }
+
+    loadNotes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [userId]);
+
+  // Load Trash whenever the logged-in user changes.
+  useEffect(() => {
+    skipTrashSaveRef.current = true;
+
+    const savedTrash = localStorage.getItem(`trash_${currentUserEmail}`);
+
+    setTrash(savedTrash ? JSON.parse(savedTrash) : []);
+  }, [currentUserEmail]);
+
+  // Load Archive whenever the logged-in user changes.
+  useEffect(() => {
+    skipArchiveSaveRef.current = true;
+
+    const savedArchive = localStorage.getItem(`archive_${currentUserEmail}`);
+
+    setArchive(savedArchive ? JSON.parse(savedArchive) : []);
+  }, [currentUserEmail]);
 
   // Save Trash
   useEffect(() => {
-    localStorage.setItem("trash", JSON.stringify(trash));
-  }, [trash]);
+    if (skipTrashSaveRef.current) {
+      skipTrashSaveRef.current = false;
+      return;
+    }
+
+    localStorage.setItem(`trash_${currentUserEmail}`, JSON.stringify(trash));
+  }, [trash, currentUserEmail]);
 
   // Save Archive
   useEffect(() => {
-    localStorage.setItem("archive", JSON.stringify(archive));
-  }, [archive]);
+    if (skipArchiveSaveRef.current) {
+      skipArchiveSaveRef.current = false;
+      return;
+    }
+
+    localStorage.setItem(`archive_${currentUserEmail}`, JSON.stringify(archive));
+  }, [archive, currentUserEmail]);
 
   // Save Theme
   useEffect(() => {
     localStorage.setItem("darkMode", JSON.stringify(darkMode));
   }, [darkMode]);
-
 
   // Ask Notification Permission
 useEffect(() => {
@@ -227,12 +457,26 @@ ${note.content}
           : n
       )
     );
+
+    supabase
+      .from("notes")
+      .update({ notified: true })
+      .eq("id", note.id)
+      .eq("user_id", userId)
+      .then(({ error }) => {
+        if (error) {
+          console.error(
+            "Supabase: failed to mark note as notified:",
+            error.message
+          );
+        }
+      });
   }
 });
   }, 1000);
 
   return () => clearInterval(interval);
-}, [notes]);
+}, [notes, userId]);
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
       const keyword = search.toLowerCase();
@@ -243,6 +487,33 @@ ${note.content}
       );
     });
   }, [notes, search]);
+ 
+
+useEffect(() => {
+  localStorage.setItem(
+    "isLoggedIn",
+    JSON.stringify(isLoggedIn)
+  );
+}, [isLoggedIn]);
+if (!isLoggedIn) {
+  return showSignup ? (
+    <Signup
+      onLogin={() => {
+        setUser(JSON.parse(localStorage.getItem("user")));
+        setIsLoggedIn(true);
+      }}
+      goToLogin={() => setShowSignup(false)}
+    />
+  ) : (
+    <Login
+      onLogin={() => {
+        setUser(JSON.parse(localStorage.getItem("user")));
+        setIsLoggedIn(true);
+      }}
+      goToSignup={() => setShowSignup(true)}
+    />
+  );
+}
 
   return (
     <div
@@ -253,11 +524,13 @@ ${note.content}
       }`}
     >
       <Header
-        search={search}
-        setSearch={setSearch}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-      />
+  search={search}
+  setSearch={setSearch}
+  darkMode={darkMode}
+  setDarkMode={setDarkMode}
+  onLogout={handleLogout}
+  user={user}
+/>
 
       <Routes>
         <Route
@@ -318,3 +591,429 @@ ${note.content}
 }
 
 export default App;
+
+
+
+
+// import Login from "./components/Login";
+// import Signup from "./components/Signup";
+// import { useEffect, useMemo, useRef, useState } from "react";
+// import { Routes, Route } from "react-router-dom";
+// import {
+//   Header,
+//   Footer,
+//   CreateArea,
+//   Note,
+//   Trash,
+//   Archive,
+// } from "./components";
+
+// function App() {
+// const [notes, setNotes] = useState([]);
+
+//   const [trash, setTrash] = useState([]);
+
+//   const [archive, setArchive] = useState([]);
+
+//   const [darkMode, setDarkMode] = useState(() => {
+//     return JSON.parse(localStorage.getItem("darkMode")) || false;
+//   });
+
+//   const [search, setSearch] = useState("");
+//   const [user, setUser] = useState(() => {
+//   return JSON.parse(localStorage.getItem("user")) || null;
+// });
+
+// const currentUserEmail = user?.email || "guest";
+
+// const [showSignup, setShowSignup] = useState(false);
+
+// const [isLoggedIn, setIsLoggedIn] = useState(() => {
+//   return JSON.parse(localStorage.getItem("isLoggedIn")) || false;
+// });
+
+// // These refs prevent the "save" effects (below) from firing with
+// // stale, still-in-memory data belonging to the PREVIOUS user right
+// // after currentUserEmail changes. Without them, switching users would
+// // overwrite the new user's saved notes/trash/archive with the old
+// // user's data before it got a chance to load. This was the root
+// // cause of "all users see the same notes".
+// const skipNotesSaveRef = useRef(false);
+// const skipTrashSaveRef = useRef(false);
+// const skipArchiveSaveRef = useRef(false);
+
+//   function addNote(newNote) {
+//   setNotes((prev) => [
+//     {
+//       ...newNote,
+//       notified: false,
+//     },
+//     ...prev,
+//   ]);
+// }
+
+//   function deleteNote(id) {
+//     const deletedNote = notes.find((note) => note.id === id);
+
+//     if (!deletedNote) return;
+
+//     setTrash((prev) => [deletedNote, ...prev]);
+//     setNotes((prev) => prev.filter((note) => note.id !== id));
+//   }
+
+//   function restoreNote(id) {
+//     const note = trash.find((item) => item.id === id);
+
+//     if (!note) return;
+
+//     setNotes((prev) => [note, ...prev]);
+//     setTrash((prev) => prev.filter((item) => item.id !== id));
+//   }
+
+//   function deleteForever(id) {
+//     setTrash((prev) => prev.filter((item) => item.id !== id));
+//   }
+
+//   function archiveNote(id) {
+//     const note = notes.find((item) => item.id === id);
+
+//     if (!note) return;
+
+//     setArchive((prev) => [note, ...prev]);
+//     setNotes((prev) => prev.filter((item) => item.id !== id));
+//   }
+
+//   function restoreArchive(id) {
+//     const note = archive.find((item) => item.id === id);
+
+//     if (!note) return;
+
+//     setNotes((prev) => [note, ...prev]);
+//     setArchive((prev) =>
+//       prev.filter((item) => item.id !== id)
+//     );
+//   }
+
+//   function deleteArchive(id) {
+//     setArchive((prev) =>
+//       prev.filter((item) => item.id !== id)
+//     );
+//   }
+
+//   function updateNote(id, updatedNote) {
+//   setNotes((prev) =>
+//     prev.map((note) =>
+//       note.id === id
+//         ? {
+//             ...note,
+//             ...updatedNote,
+//             reminderDate:
+//               updatedNote.reminderDate ??
+//               note.reminderDate,
+//             reminderTime:
+//               updatedNote.reminderTime ??
+//               note.reminderTime,
+//           }
+//         : note
+//     )
+//   );
+// }
+
+//   function togglePin(id) {
+//     setNotes((prev) => {
+//       const updated = prev.map((note) =>
+//         note.id === id
+//           ? { ...note, pinned: !note.pinned }
+//           : note
+//       );
+
+//       return updated.sort(
+//         (a, b) => Number(b.pinned) - Number(a.pinned)
+//       );
+//     });
+//   }
+
+//   function changeColor(id, color) {
+//     setNotes((prev) =>
+//       prev.map((note) =>
+//         note.id === id
+//           ? { ...note, color }
+//           : note
+//       )
+//     );
+//   }
+//   function handleLogout() {
+//   localStorage.removeItem("isLoggedIn");
+//   localStorage.removeItem("user");
+
+//   setUser(null);
+//   setIsLoggedIn(false);
+// }
+
+//   // Load Notes whenever the logged-in user changes.
+//   // NOTE: this effect is declared BEFORE the "Save Notes" effect below.
+//   // React runs effects in declaration order within a commit, so on a
+//   // user switch this load runs first, sets the skip flag, and only
+//   // then does the save effect run (and skip itself) — preventing the
+//   // previous user's notes from being written into the new user's key.
+//   useEffect(() => {
+//     skipNotesSaveRef.current = true;
+
+//     const savedNotes = localStorage.getItem(`notes_${currentUserEmail}`);
+
+//     if (!savedNotes) {
+//       setNotes([]);
+//       return;
+//     }
+
+//     setNotes(
+//       JSON.parse(savedNotes).map((note) => ({
+//         id: note.id ?? crypto.randomUUID(),
+//         title: note.title ?? "",
+//         content: note.content ?? "",
+//         pinned: note.pinned ?? false,
+//         color: note.color ?? "bg-white",
+//         reminderDate: note.reminderDate ?? "",
+//         reminderTime: note.reminderTime ?? "",
+//         notified: note.notified ?? false,
+//       }))
+//     );
+//   }, [currentUserEmail]);
+
+//   // Load Trash whenever the logged-in user changes.
+//   useEffect(() => {
+//     skipTrashSaveRef.current = true;
+
+//     const savedTrash = localStorage.getItem(`trash_${currentUserEmail}`);
+
+//     setTrash(savedTrash ? JSON.parse(savedTrash) : []);
+//   }, [currentUserEmail]);
+
+//   // Load Archive whenever the logged-in user changes.
+//   useEffect(() => {
+//     skipArchiveSaveRef.current = true;
+
+//     const savedArchive = localStorage.getItem(`archive_${currentUserEmail}`);
+
+//     setArchive(savedArchive ? JSON.parse(savedArchive) : []);
+//   }, [currentUserEmail]);
+
+//     // Save Notes
+//     useEffect(() => {
+//   if (skipNotesSaveRef.current) {
+//     skipNotesSaveRef.current = false;
+//     return;
+//   }
+
+//   localStorage.setItem(
+//     `notes_${currentUserEmail}`,
+//     JSON.stringify(notes)
+//   );
+// }, [notes, currentUserEmail]);
+    
+// //  
+//   // Save Trash
+//   useEffect(() => {
+//     if (skipTrashSaveRef.current) {
+//       skipTrashSaveRef.current = false;
+//       return;
+//     }
+
+//     localStorage.setItem(`trash_${currentUserEmail}`, JSON.stringify(trash));
+//   }, [trash, currentUserEmail]);
+
+//   // Save Archive
+//   useEffect(() => {
+//     if (skipArchiveSaveRef.current) {
+//       skipArchiveSaveRef.current = false;
+//       return;
+//     }
+
+//     localStorage.setItem(`archive_${currentUserEmail}`, JSON.stringify(archive));
+//   }, [archive, currentUserEmail]);
+
+//   // Save Theme
+//   useEffect(() => {
+//     localStorage.setItem("darkMode", JSON.stringify(darkMode));
+//   }, [darkMode]);
+
+//   // Ask Notification Permission
+// useEffect(() => {
+//   if (!("Notification" in window)) return;
+
+//   if (Notification.permission === "default") {
+//     Notification.requestPermission().then((permission) => {
+//       console.log("Permission:", permission);
+//     });
+//   }
+// }, []); 
+
+//   // Reminder Notification
+// useEffect(() => {
+//   if (!("Notification" in window)) return;
+
+//   const interval = setInterval(() => {
+//     const now = new Date();
+
+//     const currentDate = now.toISOString().split("T")[0];
+
+//     const currentTime = now.toLocaleTimeString("en-GB", {
+//       hour: "2-digit",
+//       minute: "2-digit",
+//       hour12: false,
+//     });
+//     console.log("Current:", currentDate, currentTime);
+// console.log(notes);
+
+// notes.forEach((note) => {
+//   console.log({
+//     savedDate: note.reminderDate,
+//     currentDate,
+//     savedTime: note.reminderTime,
+//     currentTime,
+//     notified: note.notified,
+//   });
+
+//   if (
+//     note.reminderDate === currentDate &&
+//     note.reminderTime === currentTime &&
+//     !note.notified
+//   ) {
+//     console.log("MATCHED ✅");
+
+//     new Notification("📌 Keeper Reminder", {
+//   body: `${note.title}
+
+// ${note.content}
+
+// 🕒 ${note.reminderTime}`,
+//   icon: "/Keeper-logo.png",
+// });
+
+//     setNotes((prev) =>
+//       prev.map((n) =>
+//         n.id === note.id
+//           ? { ...n, notified: true }
+//           : n
+//       )
+//     );
+//   }
+// });
+//   }, 6000);
+
+//   return () => clearInterval(interval);
+// }, [notes]);
+//   const filteredNotes = useMemo(() => {
+//     return notes.filter((note) => {
+//       const keyword = search.toLowerCase();
+
+//       return (
+//         note.title.toLowerCase().includes(keyword) ||
+//         note.content.toLowerCase().includes(keyword)
+//       );
+//     });
+//   }, [notes, search]);
+ 
+
+// useEffect(() => {
+//   localStorage.setItem(
+//     "isLoggedIn",
+//     JSON.stringify(isLoggedIn)
+//   );
+// }, [isLoggedIn]);
+// if (!isLoggedIn) {
+//   return showSignup ? (
+//     <Signup
+//       onLogin={() => {
+//         setUser(JSON.parse(localStorage.getItem("user")));
+//         setIsLoggedIn(true);
+//       }}
+//       goToLogin={() => setShowSignup(false)}
+//     />
+//   ) : (
+//     <Login
+//       onLogin={() => {
+//         setUser(JSON.parse(localStorage.getItem("user")));
+//         setIsLoggedIn(true);
+//       }}
+//       goToSignup={() => setShowSignup(true)}
+//     />
+//   );
+// }
+
+//   return (
+//     <div
+//       className={`min-h-screen transition-all duration-300 ${
+//         darkMode
+//           ? "bg-gray-900 text-white"
+//           : "bg-linear-to-br from-yellow-50 via-orange-50 to-amber-100 text-black"
+//       }`}
+//     >
+//       <Header
+//   search={search}
+//   setSearch={setSearch}
+//   darkMode={darkMode}
+//   setDarkMode={setDarkMode}
+//   onLogout={handleLogout}
+//   user={user}
+// />
+
+//       <Routes>
+//         <Route
+//           path="/"
+//           element={
+//             <>
+//               <CreateArea
+//                 onAdd={addNote}
+//                 darkMode={darkMode}
+//               />
+
+//               <div className="px-10 py-8 flex flex-wrap gap-6">
+//                 {filteredNotes.map((note) => (
+//                   <Note
+//                     key={note.id}
+//                     {...note}
+//                     darkMode={darkMode}
+//                     onDelete={deleteNote}
+//                     onArchive={archiveNote}
+//                     onUpdate={updateNote}
+//                     onPin={togglePin}
+//                     onColor={changeColor}
+//                   />
+//                 ))}
+//               </div>
+//             </>
+//           }
+//         />
+
+//         <Route
+//           path="/trash"
+//           element={
+//             <Trash
+//               trash={trash}
+//               darkMode={darkMode}
+//               onRestore={restoreNote}
+//               onDeleteForever={deleteForever}
+//             />
+//           }
+//         />
+
+//         <Route
+//           path="/archive"
+//           element={
+//             <Archive
+//               archive={archive}
+//               darkMode={darkMode}
+//               onRestore={restoreArchive}
+//               onDelete={deleteArchive}
+//             />
+//           }
+//         />
+//       </Routes>
+
+//       <Footer />
+//     </div>
+//   );
+// }
+
+// export default App;
