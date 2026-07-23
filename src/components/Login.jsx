@@ -143,7 +143,7 @@ const handleForgotPassword = async () => {
 
           {/* Login Card */}
           <div
- className="
+  className="
 rounded-[20px]
 bg-white
 border
@@ -156,7 +156,7 @@ lg:px-11
 lg:pb-10
 shadow-[0_12px_48px_rgba(217,184,95,0.5)]
 ">
-
+ 
             {/* Heading */}
             <div className="text-center">
 

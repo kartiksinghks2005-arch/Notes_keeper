@@ -156,21 +156,34 @@ function Note({
           </p>
 
           {(reminderDate || reminderTime) && (
-            <div
-              className={`flex items-center gap-2 mt-4 text-sm font-medium ${
-                darkMode
-                  ? "text-yellow-300"
-                  : "text-orange-600"
-              }`}
-            >
-              <FaBell />
-              <span>
-                {reminderDate}
-                {reminderDate && reminderTime ? " • " : ""}
-                {reminderTime}
-              </span>
-            </div>
-          )}
+  <div
+    className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium shadow-sm ${
+      darkMode
+        ? "bg-yellow-900/30 text-yellow-300"
+        : "bg-yellow-100 text-yellow-700"
+    }`}
+  >
+    <FaBell className="text-[12px]" />
+
+    <span>
+      {reminderDate
+        ? new Date(reminderDate).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+          })
+        : ""}
+
+      {reminderDate && reminderTime ? " • " : ""}
+
+      {reminderTime
+        ? new Date(`2000-01-01T${reminderTime}`).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : ""}
+    </span>
+  </div>
+)}
         </>
       )}
 

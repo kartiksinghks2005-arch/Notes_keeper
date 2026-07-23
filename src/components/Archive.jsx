@@ -26,7 +26,7 @@ function Archive({
         </button>
 
         <h2 className="text-2xl font-bold">
-          📦 Archive
+
         </h2>
       </div>
 

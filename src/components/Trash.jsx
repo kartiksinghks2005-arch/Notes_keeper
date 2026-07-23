@@ -20,7 +20,7 @@ function Trash({ trash, onRestore, onDeleteForever, darkMode }) {
           <FaArrowLeft />
         </button>
 
-        <h2 className="text-2xl font-bold">🗑 Trash</h2>
+<h2 className="text-2xl font-bold">🗑 Trash</h2>
       </div>
 
       {trash.length === 0 ? (
