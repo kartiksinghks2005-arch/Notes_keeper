@@ -569,7 +569,7 @@ notes.forEach((note) => {
   ) {
     console.log("MATCHED ✅");
 
-    new Notification("📌 Keeper Reminder", {
+    new Notification("📌 Notes_Keeper", {
   body: `${note.title}
 
 ${note.content}

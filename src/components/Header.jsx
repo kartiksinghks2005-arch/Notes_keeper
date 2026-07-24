@@ -34,7 +34,7 @@ function Header({
             <FaRegLightbulb className="text-3xl text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-white">Keeper</h1>
+            <h1 className="text-3xl font-bold text-white">Notes_Keeper</h1>
             <p className="text-xs text-yellow-100">Capture ideas instantly</p>
           </div>
         </Link>

@@ -17,8 +17,8 @@ export default defineConfig({
       ],
 
       manifest: {
-        name: "Keeper Notes",
-        short_name: "Keeper",
+        name: "Notes_Keeper",
+        short_name: "Notes_Keeper",
         description: "Smart Note Taking App",
         theme_color: "#facc15",
         background_color: "#ffffff",
