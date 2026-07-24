@@ -15,28 +15,8 @@ function CreateArea({ onAdd, darkMode }) {
     reminderTime: null,
   });
 
-  const formatDate = (date) => {
-    if (!date) return "Pick a date";
-
-    return date.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const formatTime = (time) => {
-    if (!time) return "Pick a time";
-
-    return time.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  };
-
   function handleChange(e) {
     const { name, value } = e.target;
-
     setNote((prev) => ({
       ...prev,
       [name]: value,
@@ -44,16 +24,18 @@ function CreateArea({ onAdd, darkMode }) {
   }
 
   function formatLocalDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
 
-  return `${year}-${month}-${day}`;
-}
-
+  function handleFormSubmit(e) {
+    e.preventDefault();
+  }
 
   function submitNote(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
 
     if (!note.title.trim() && !note.content.trim()) return;
 
@@ -63,11 +45,7 @@ function CreateArea({ onAdd, darkMode }) {
       content: note.content,
       pinned: false,
       color: "bg-white",
-
-     reminderDate: note.reminderDate
-  ? formatLocalDate(note.reminderDate)
-  : "",
-
+      reminderDate: note.reminderDate ? formatLocalDate(note.reminderDate) : "",
       reminderTime: note.reminderTime
         ? note.reminderTime.toLocaleTimeString("en-GB", {
             hour: "2-digit",
@@ -91,10 +69,9 @@ function CreateArea({ onAdd, darkMode }) {
   return (
     <div className="flex justify-center mt-10 px-4">
       <form
+        onSubmit={handleFormSubmit}
         className={`relative w-full max-w-xl rounded-xl p-4 shadow-lg transition-all duration-300 hover:shadow-xl ${
-          darkMode
-            ? "bg-gray-800 text-white"
-            : "bg-white text-gray-900"
+          darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
         }`}
       >
         {expand && (
@@ -104,6 +81,12 @@ function CreateArea({ onAdd, darkMode }) {
             placeholder="Title"
             value={note.title}
             onChange={handleChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitNote();
+              }
+            }}
             className={`mb-3 w-full bg-transparent text-xl font-semibold outline-none ${
               darkMode
                 ? "text-white placeholder-gray-400"
@@ -127,125 +110,89 @@ function CreateArea({ onAdd, darkMode }) {
         />
 
         {expand && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() =>
-                setShowReminderPicker((prev) => !prev)
-              }
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition-all duration-200 ${
-                darkMode
-                  ? "border-yellow-700 bg-yellow-900/20 text-yellow-300 hover:border-yellow-600 hover:bg-yellow-900/30"
-                  : "border-yellow-300 bg-yellow-50 text-yellow-700 hover:border-yellow-400 hover:bg-yellow-100"
-              }`}
-            >
-              <FaRegBell className="text-[14px]" />
-              <span>Add Reminder</span>
-            </button>
-                        {showReminderPicker && (
-              <div
-                className={`mt-4 rounded-2xl border p-5 shadow-md transition-all duration-300 ${
+          <>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowReminderPicker((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm ${
                   darkMode
-                    ? "border-gray-700 bg-gray-900"
-                    : "border-gray-200 bg-white"
+                    ? "border-yellow-700 bg-yellow-900/20 text-yellow-300"
+                    : "border-yellow-300 bg-yellow-50 text-yellow-700"
                 }`}
               >
-                {/* Date */}
-                <div className="mb-4">
-                  <label
-                    className={`mb-2 flex items-center gap-2 text-sm font-semibold ${
-                      darkMode ? "text-gray-300" : "text-gray-600"
-                    }`}
-                  >
-                    <FiCalendar className="text-yellow-500" />
-                    Reminder Date
-                  </label>
+                <FaRegBell className="text-[14px]" />
+                <span>Add Reminder</span>
+              </button>
 
-                  <DatePicker
-                    selected={note.reminderDate}
-                    onChange={(date) =>
-                      setNote((prev) => ({
-                        ...prev,
-                        reminderDate: date,
-                      }))
-                    }
-                    dateFormat="dd MMM yyyy"
-                    placeholderText="Pick a date"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition ${
-                      darkMode
-                        ? "border-gray-700 bg-gray-800 text-white focus:border-yellow-500"
-                        : "border-gray-300 bg-gray-50 text-gray-700 focus:border-yellow-400"
-                    }`}
-                  />
-                </div>
+              {showReminderPicker && (
+  <div
+    className={`mt-4 rounded-2xl border p-5 ${
+      darkMode
+        ? "border-gray-700 bg-gray-900"
+        : "border-gray-200 bg-white"
+    }`}
+  >
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                {/* Time */}
-                <div className="mb-5">
-                  <label
-                    className={`mb-2 flex items-center gap-2 text-sm font-semibold ${
-                      darkMode ? "text-gray-300" : "text-gray-600"
-                    }`}
-                  >
-                    <FiClock className="text-yellow-500" />
-                    Reminder Time
-                  </label>
+      {/* Reminder Date */}
+      <div>
+        <label className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <FiCalendar className="text-yellow-500" />
+          Reminder Date
+        </label>
 
-                  <DatePicker
-                    selected={note.reminderTime}
-                    onChange={(time) =>
-                      setNote((prev) => ({
-                        ...prev,
-                        reminderTime: time,
-                      }))
-                    }
-                    showTimeSelect
-                    showTimeSelectOnly
-                    timeIntervals={5}
-                    timeCaption="Time"
-                    dateFormat="h:mm aa"
-                    placeholderText="Pick a time"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition ${
-                      darkMode
-                        ? "border-gray-700 bg-gray-800 text-white focus:border-yellow-500"
-                        : "border-gray-300 bg-gray-50 text-gray-700 focus:border-yellow-400"
-                    }`}
-                  />
-                </div>
+        <DatePicker
+          selected={note.reminderDate}
+          onChange={(date) =>
+            setNote((p) => ({
+              ...p,
+              reminderDate: date,
+            }))
+          }
+          dateFormat="dd MMM yyyy"
+          placeholderText="Select date"
+          className="w-full rounded-xl border px-4 py-3"
+        />
+      </div>
 
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowReminderPicker(false)}
-                    className={`rounded-lg px-4 py-2 text-sm transition ${
-                      darkMode
-                        ? "hover:bg-gray-800"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    Cancel
-                  </button>
+      {/* Reminder Time */}
+      <div>
+        <label className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <FiClock className="text-yellow-500" />
+          Reminder Time
+        </label>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowReminderPicker(false)}
-                    className="rounded-lg bg-yellow-400 px-5 py-2 text-sm font-semibold text-white transition hover:bg-yellow-500"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <DatePicker
+          selected={note.reminderTime}
+          onChange={(time) =>
+            setNote((p) => ({
+              ...p,
+              reminderTime: time,
+            }))
+          }
+          showTimeSelect
+          showTimeSelectOnly
+          timeIntervals={5}
+          dateFormat="h:mm aa"
+          placeholderText="Select time"
+          className="w-full rounded-xl border px-4 py-3"
+        />
+      </div>
 
-        {expand && (
-          <button
-            type="button"
-            onClick={submitNote}
-            className="absolute -bottom-5 right-5 flex h-12 w-12 items-center justify-center rounded-full bg-yellow-400 text-white shadow-lg transition hover:bg-yellow-500"
-          >
-            <FaPlus />
-          </button>
+    </div>
+  </div>
+)}
+            </div>
+
+            <button
+              type="button"
+              onClick={submitNote}
+              className="absolute -bottom-5 right-5 flex h-12 w-12 items-center justify-center rounded-full bg-yellow-400 text-white shadow-lg hover:bg-yellow-500"
+            >
+              <FaPlus />
+            </button>
+          </>
         )}
       </form>
     </div>

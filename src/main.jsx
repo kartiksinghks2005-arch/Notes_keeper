@@ -1,4 +1,5 @@
 import { Toaster } from "react-hot-toast";
+import { registerSW } from "virtual:pwa-register";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -21,3 +22,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+registerSW({
+  onNeedRefresh() {
+    console.log("New version available.");
+  },
+  onOfflineReady() {
+    console.log("App is ready to work offline.");
+  },
+});

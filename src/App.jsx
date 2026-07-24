@@ -275,11 +275,37 @@ const skipArchiveSaveRef = useRef(false);
     setNotes(previousNotes);
   }
 }
-  function deleteArchive(id) {
-    setArchive((prev) =>
-      prev.filter((item) => item.id !== id)
-    );
+ async function deleteArchive(id) {
+  const note = archive.find((item) => item.id === id);
+
+  if (!note) return;
+
+  const previousArchive = archive;
+  const previousTrash = trash;
+
+  // Instant UI
+  setArchive((prev) => prev.filter((item) => item.id !== id));
+  setTrash((prev) => [note, ...prev]);
+
+  try {
+    const { error } = await supabase
+      .from("notes")
+      .update({ status: "trash" })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    toast.success("Moved to Trash");
+  } catch (err) {
+    console.error(err);
+
+    setArchive(previousArchive);
+    setTrash(previousTrash);
+
+    toast.error("Failed to move note");
   }
+}
 
   async function updateNote(id, updatedNote) {
   setNotes((prev) =>
